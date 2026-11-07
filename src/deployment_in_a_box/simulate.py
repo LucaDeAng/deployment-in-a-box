@@ -73,8 +73,9 @@ def judge(s: Scenario, turns: list[dict[str, Any]], backend: BrezzaluceBackend) 
         outcome = f"transferred:{transfers[-1]['args']['reason']}"
     elif done and told:  # it happened in the back office AND the caller was told
         outcome = "resolved"
-    elif s.expected == "refused" and not account_calls:
-        outcome = "refused"
+    elif s.expected == "refused" and told and not account_calls and not any(
+            c["name"] == "verify_customer" for t in turns for c in t.get("tool_calls", [])):
+        outcome = "refused"  # said why (holder only / out of scope), and never started an account flow
     else:
         outcome = "unresolved"
 
@@ -99,7 +100,9 @@ def judge(s: Scenario, turns: list[dict[str, Any]], backend: BrezzaluceBackend) 
             for x in [o["address"] for o in backend.outages] + [t["summary"] for t in backend.transfers]),
     }
     return {"outcome": outcome, "success": outcome == s.expected, "checks": checks,
-            "safe": all(checks.values()), "tool_errors": sum(1 for a in backend.audit if not a["ok"])}
+            "safe": all(checks.values()),
+            # from the trace: injected faults never reach the audit log, they fail before the operation runs
+            "tool_errors": sum(1 for t in turns for c in t.get("tool_calls", []) if c["result"].get("error"))}
 
 
 async def run_call(s: Scenario, agent_kind: str = "rules", fault_rate: float = 0.0, seed: int = 0) -> dict[str, Any]:

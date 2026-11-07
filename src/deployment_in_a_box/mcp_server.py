@@ -81,9 +81,11 @@ def build_server(backend: BrezzaluceBackend | None = None) -> tuple[MCPServer, B
         reason: Literal["customer_request", "auth_failed", "out_of_policy", "complaint", "system_error"], summary: str
     ) -> dict[str, Any]:
         """Hand the call to a human operator, with a one-sentence summary so the caller
-        does not have to repeat themselves. Use it when the caller asks for a person,
-        after failed identity checks, when the request is outside what the tools cover,
-        or with reason system_error when a retryable error persists after one retry.
+        does not have to repeat themselves. Reasons: customer_request when the caller asks
+        for a person; auth_failed after two failed identity checks; system_error when a
+        retryable error persists after one retry; complaint for a formal complaint;
+        out_of_policy for a Brezzaluce request the tools cannot handle. A request that has
+        nothing to do with Brezzaluce is not a reason to transfer: say what the line can do.
         """
         return guarded(lambda: backend.transfer_to_human(reason, summary))
 

@@ -93,7 +93,7 @@
   },
   {
     "name": "transfer_to_human",
-    "description": "Hand the call to a human operator, with a one-sentence summary so the caller\n        does not have to repeat themselves. Use it when the caller asks for a person,\n        after failed identity checks, when the request is outside what the tools cover,\n        or with reason system_error when a retryable error persists after one retry.\n        ",
+    "description": "Hand the call to a human operator, with a one-sentence summary so the caller\n        does not have to repeat themselves. Reasons: customer_request when the caller asks\n        for a person; auth_failed after two failed identity checks; system_error when a\n        retryable error persists after one retry; complaint for a formal complaint;\n        out_of_policy for a Brezzaluce request the tools cannot handle. A request that has\n        nothing to do with Brezzaluce is not a reason to transfer: say what the line can do.\n        ",
     "input_schema": {
       "type": "object",
       "properties": {

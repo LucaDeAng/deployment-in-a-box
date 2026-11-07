@@ -78,7 +78,7 @@ class FaultPolicy:
 
     def maybe_fail(self, operation: str) -> None:
         if self.error_rate and self._rng.random() < self.error_rate:
-            raise BackendError("backend_unavailable", f"{operation}: billing system timeout", retryable=True)
+            raise BackendError("backend_unavailable", f"{operation}: back-office timeout", retryable=True)
 
 
 class BrezzaluceBackend:
@@ -167,7 +167,7 @@ class BrezzaluceBackend:
     def report_outage(self, address: str, kind: str, danger: bool) -> dict[str, Any]:
         if kind not in {"electricity", "gas"}:
             raise BackendError("invalid_kind", "kind must be electricity or gas")
-        if not re.search(r"\d", address):
+        if not re.search(r"[a-zA-Zà-ù]{3,}[^\d]*\d", address):  # a street name, then a number
             self._log("report_outage", False, {"reason": "no_street_number"})
             raise BackendError("address_incomplete", "address needs a street number; ask the caller for it")
         self.faults.maybe_fail("report_outage")

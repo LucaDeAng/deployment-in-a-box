@@ -10,7 +10,7 @@ tree with a safety gate, and regression tests for the next change.
 
 | | |
 |---|---|
-| **5 bugs** | found by the harness before any user: 4 in the agent, 1 in the harness itself (below) |
+| **6 bugs** | found before any user: 4 in the agent by the simulation, 2 in the judge by review (below) |
 | **0 safety failures** | at 0%, 20% and 50% injected backend faults. Every check has a negative-control test proving it can fail. |
 | **18 checkpoints** | exported from 11 simulated conversations as regression tests for the [transcript-regression-kit](https://github.com/LucaDeAng/transcript-regression-kit) |
 
@@ -28,8 +28,11 @@ Each problem was found by running it, then fixed and pinned by a test.
   reason, `system_error`, and never blames the caller.
 - **A gas leak with the system down reached the operator without the address.**
   The handoff summary now carries it.
-- **An outage ticket could be logged as "45, Napoli"** with no street. The judge
-  now checks that tickets are actionable.
+- **An outage ticket could be logged as "45, Napoli"** with no street. The back
+  office now rejects it, and the judge checks that every ticket is actionable.
+- **"Refused" could not fail.** An agent that asked a relative for the holder's
+  birth date still scored as a correct refusal. A refusal now has to say why
+  (holder only, or out of scope) and must not start an identity check.
 - **The judge itself leaked.** A review injected an agent that never verified
   the caller and read out an amount and a full IBAN, and it still scored
   "resolved, safe": the leak check only ran on refusal scenarios, and outcomes
@@ -72,15 +75,26 @@ scripted caller ──text──▶ agent (rules | Claude) ──MCP tools──
 
 ```bash
 uv sync
-uv run pytest -q                                   # 42 tests: server, simulation, judge controls, KPIs, export
+uv run pytest -q                                   # 43 tests: server, simulation, judge controls, KPIs, export
 uv run python -m deployment_in_a_box.simulate --fault-rate 0.2 --seeds 5 --out runs/faults.jsonl
 uv run python -m deployment_in_a_box.kpi runs/faults.jsonl --html runs/report.html --min-safety 1
-uv run python -m deployment_in_a_box.export runs/faults.jsonl --out regression
+uv run python -m deployment_in_a_box.simulate --out runs/clean.jsonl   # regression/ is exported from the clean run
+uv run python -m deployment_in_a_box.export runs/clean.jsonl --out regression
 uv run python -m deployment_in_a_box.mcp_server    # the MCP server over stdio, for any MCP client
 ```
 
 `--agent claude` swaps the rules agent for Claude, which gets its tool
 definitions from the MCP server's own tool list. It needs `ANTHROPIC_API_KEY`.
+Expect stricter scoring than for the rules agent: the scripted callers and some
+checks react to exact phrases (for example "800 000 999"), so a correct
+paraphrase can fail. That makes results look worse, never better.
+
+To replay the exported transcripts against a candidate agent with the kit:
+
+```bash
+cd ../transcript-regression-kit
+T2R_AGENT=claude T2R_AGENT_DIR="$PWD/../deployment-in-a-box/regression/agent" \n  python -m t2r.run --agent claude --transcripts ../deployment-in-a-box/regression/transcripts
+```
 
 ## Reading the simulation numbers honestly
 

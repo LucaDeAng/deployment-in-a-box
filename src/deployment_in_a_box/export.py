@@ -86,7 +86,8 @@ def to_transcript(row: dict[str, Any]) -> dict[str, Any]:
     if scenario.id in FINAL_SAY and batches:
         batches[-1]["expect"] = {"say_any": [FINAL_SAY[scenario.id]], "escalate": False}
     if scenario.expected == "transferred:auth_failed":
-        failed = [b for b in batches if b["calls"][0]["name"] == "verify_customer"]
+        failed = [b for b in batches if b["calls"][0]["name"] == "verify_customer"
+                  and b["calls"][0]["result"].get("verified") is False]  # not a 503 retry
         failed[1]["expect"] = {"escalate": True, "no_calls": ACCOUNT_TOOLS}  # after the second failed check
     return {"id": f"SIM-{scenario.id}", "title": f"Simulated call: {scenario.id} ({scenario.expected})",
             "source": "simulated", "tags": sorted(set(tags)), "turns": turns}

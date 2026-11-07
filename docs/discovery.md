@@ -72,8 +72,8 @@ Definitions that a contract would have to fix:
 | seconds per exchange | 25 s | caller turn + spoken answer; assumption |
 | fixed overhead | 30 s | greeting, disclosure, closing; assumption |
 | handle time used for cost | 3 min | assumption for a utility line. The simulated 1.3 min is a lower bound because scripted callers are terse. |
-| per-minute price, all-in | €0.15/min | assumption: voice platform + LLM + telephony. Public voice-only list prices are around €0.08/min. |
-| per-resolution price | €0.90 | order of magnitude of public outcome prices, which are mostly for chat. Voice outcome pricing is usually quoted case by case. |
+| per-minute price, all-in | €0.15/min | assumption: voice platform + LLM + telephony. Public voice-only list prices start around $0.08/min (e.g. [ElevenLabs](https://elevenlabs.io/pricing/api), Nov 2026). |
+| per-resolution price | €0.90 | order of magnitude of public outcome prices, mostly for chat (e.g. [Fin](https://fin.ai/pricing), $0.99). Voice outcome pricing is usually quoted case by case. |
 | operator cost per contact | €5.00 | assumption, no source: replace with the client's loaded cost |
 | callback rate after a refusal | 50% within 7 days | assumption |
 
@@ -108,8 +108,9 @@ callers are a measurable share of traffic (§5).
 
 ## 4. Integration constraints we designed for
 
-- The agent never sees a customer ID it can swap. Identity is a signed,
-  expiring session token, and account tools derive the customer from it.
+- The agent cannot alter which customer it acts for. Identity is a signed,
+  expiring session token, and account tools derive the customer from it, so
+  editing the customer ID inside the token breaks the signature.
 - The IBAN is masked at the source, not in the prompt.
 - Three wrong birth dates lock the account. The agent's own policy hands off
   after two, so the lock is a backstop, not the plan.
@@ -118,10 +119,15 @@ callers are a measurable share of traffic (§5).
 
 ## 5. Open question: AI callers
 
-Consumer agents now place calls to businesses. Google has made these calls from
-Search since July 2025 and from Pixel phones since September 2026. In October
-2026 the first protocols for receiving such agents appeared: Sierra and Meta's
-Personal Agent Protocol, and Decagon's gateway. Both cover web and text channels,
-not voice. Here the `ai-caller` scenario is simply refused, like any third party.
+Consumer agents now place calls to businesses. Google, for example, lets Gemini
+call businesses from Pixel phones
+([TechCrunch, Sep 2026](https://techcrunch.com/2026/09/24/google-tests-letting-gemini-make-phone-calls-initially-for-us-pixel-owners/)).
+In October 2026 the first protocols for receiving such agents appeared:
+Sierra and Meta's
+[Personal Agent Protocol](https://sierra.ai/blog/introducing-personal-agent-protocol)
+and Decagon's
+[PACT](https://decagon.ai/blog/introducing-the-personal-agent-consent-trust-protocol-pact).
+Both separate the agent's identity from what the customer allowed it to do.
+As published, both describe web, API and text routes, not the phone line. Here the `ai-caller` scenario is simply refused, like any third party.
 The next asset, an AI-to-AI call lab, explores the alternative: a declared agent
 presenting a scoped, delegated credential.

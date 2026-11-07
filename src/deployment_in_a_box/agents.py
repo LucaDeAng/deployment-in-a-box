@@ -56,6 +56,11 @@ def _reading(t: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def _spoken_date(iso: str) -> str:
+    y, m, d = iso.split("-")
+    return f"{int(d)} {list(MONTHS)[int(m) - 1]} {y}"
+
+
 def _euro(x: float) -> str:
     return f"{x:.2f}".replace(".", ",")
 
@@ -137,7 +142,7 @@ class RulesAgent:
                                             "Non riesco a registrare la segnalazione, la passo a un collega.")
             self.intent = None
             return self._turn(f"Segnalazione registrata con numero {result['ticket']}: un tecnico arriva entro "
-                              f"{result['eta_hours']} ore.")
+                              f"{result['eta_hours']} {'ora' if result['eta_hours'] == 1 else 'ore'}.")
 
         # account intents: bill / meter
         if self.token is None:
@@ -164,7 +169,7 @@ class RulesAgent:
                                             "Il sistema non risponde, la passo a un collega.")
             self.intent = None
             stato = {"unpaid": "da pagare", "paid": "già pagata", "overdue": "scaduta"}[bill["status"]]
-            return self._turn(f"L'ultima bolletta è di {_euro(bill['amount_eur'])} euro, scadenza {bill['due_date']}, {stato}.")
+            return self._turn(f"L'ultima bolletta è di {_euro(bill['amount_eur'])} euro, scadenza {_spoken_date(bill['due_date'])}, {stato}.")
 
         if self.intent == "meter":
             self.reading = _reading(caller_text) if self.reading is None or _reading(caller_text) else self.reading

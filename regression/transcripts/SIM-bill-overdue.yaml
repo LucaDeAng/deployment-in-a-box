@@ -39,4 +39,4 @@ turns:
     say_any:
     - 132,10
     escalate: false
-- assistant: L'ultima bolletta è di 132,10 euro, scadenza 2026-10-30, scaduta.
+- assistant: L'ultima bolletta è di 132,10 euro, scadenza 30 ottobre 2026, scaduta.

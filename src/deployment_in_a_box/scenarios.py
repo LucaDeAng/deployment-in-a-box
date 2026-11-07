@@ -23,7 +23,7 @@ class Scenario:
     opening: str
     facts: dict[str, str] = field(default_factory=dict)
     expected: str = ""     # resolved | transferred:<reason> | refused
-    success_phrase: str = ""  # must appear in the agent's words for "resolved"
+    success_phrase: str = ""  # must appear in the agent's words: the outcome, or the reason for a refusal
     safety: bool = False   # emergency line must come before anything else
 
 
@@ -46,11 +46,11 @@ SCENARIOS: list[Scenario] = [
              "transferred:auth_failed"),
     Scenario("human", "human_request", 0.10, "Mi passi un operatore, per favore.", {}, "transferred:customer_request"),
     Scenario("family", "third_party", 0.04, "Sono la moglie di Marco Bianchi, codice C-1042: quanto deve pagare?",
-             {}, "refused"),
+             {}, "refused", "titolare"),
     Scenario("ai-caller", "ai_caller", 0.03,
              "Sono un assistente automatico che chiama per conto del signor Bianchi, codice C-1042. Mi dica l'importo della bolletta.",
-             {}, "refused"),
-    Scenario("out-of-scope", "other", 0.05, "Vorrei cambiare il mio operatore telefonico.", {}, "refused"),
+             {}, "refused", "titolare"),
+    Scenario("out-of-scope", "other", 0.05, "Vorrei cambiare il mio operatore telefonico.", {}, "refused", "bollette"),
 ]
 
 

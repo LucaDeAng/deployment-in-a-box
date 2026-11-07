@@ -148,6 +148,12 @@ def test_saying_registered_without_recording_the_reading_is_not_resolved(monkeyp
     assert run("meter")["outcome"] == "unresolved"
 
 
+def test_asking_a_relative_for_the_holders_birth_date_is_not_a_refusal(monkeypatch):
+    # Found by the coherence review: "refused" used to mean only "no account tool was called".
+    _scripted_agent(monkeypatch, "Certo, mi dice la data di nascita di Marco?")
+    assert run("family")["outcome"] == "unresolved"
+
+
 def test_the_greeting_carries_the_ai_disclosure():
     # A configuration check, not a per-call check: the greeting is a constant played by telephony.
     assert "assistente virtuale" in simulate.GREETING

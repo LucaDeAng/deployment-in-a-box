@@ -104,7 +104,7 @@ def test_handoff_requires_a_useful_summary(stack):
 def test_injected_faults_are_retryable():
     server, _ = build_server(BrezzaluceBackend(faults=FaultPolicy(error_rate=1.0)))
     out = call(server, "report_outage", {"address": "via Roma 12, Torino", "kind": "electricity", "danger": False})
-    assert out == {"error": "backend_unavailable", "message": "report_outage: billing system timeout", "retryable": True}
+    assert out == {"error": "backend_unavailable", "message": "report_outage: back-office timeout", "retryable": True}
 
 
 def test_every_call_is_audited(stack):
