@@ -67,7 +67,7 @@ scripted caller ──text──▶ agent (rules | Claude) ──MCP tools──
 | 50% | 59% | 46% | 100% | + system error 41% |
 
 Rates are weighted by the contact mix. Under faults the agent degrades into
-handoffs that state the reason, never into unsafe calls. With the assumptions in
+handoffs that state the reason, never into unsafe calls. With no faults and the assumptions in
 `docs/discovery.md`, cost per resolved contact is about €1.20 on per-minute
 pricing and €1.90 on per-resolution pricing. It is driven by the operator cost of
 the 15% of calls that reach a human, not by the platform price, so **containment
