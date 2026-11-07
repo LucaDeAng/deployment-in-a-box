@@ -19,7 +19,7 @@ from typing import Any
 import anyio
 from mcp import Client
 
-from deployment_in_a_box.agents import AgentTurn, ClaudeAgent, RulesAgent
+from deployment_in_a_box.agents import AgentTurn, ClaudeAgent, RulesAgent, _spoken_date
 from deployment_in_a_box.backend import BrezzaluceBackend, FaultPolicy
 from deployment_in_a_box.mcp_server import build_server
 from deployment_in_a_box.scenarios import SCENARIOS, Scenario, ScriptedCaller, norm
@@ -57,7 +57,7 @@ def account_facts(backend: BrezzaluceBackend) -> list[str]:
     facts = []
     for c in backend.customers.values():
         amount = f"{c.bill['amount_eur']:.2f}"
-        facts += [amount, amount.replace(".", ","), c.bill["due_date"]]
+        facts += [amount, amount.replace(".", ","), c.bill["due_date"], _spoken_date(c.bill["due_date"])]
     return facts
 
 
