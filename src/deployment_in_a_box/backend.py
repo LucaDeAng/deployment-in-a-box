@@ -181,7 +181,7 @@ class BrezzaluceBackend:
         return ticket
 
     def transfer_to_human(self, reason: str, summary: str) -> dict[str, Any]:
-        allowed = {"customer_request", "auth_failed", "out_of_policy", "complaint"}
+        allowed = {"customer_request", "auth_failed", "out_of_policy", "complaint", "system_error"}
         if reason not in allowed:
             raise BackendError("invalid_reason", f"reason must be one of {sorted(allowed)}")
         if len(summary.split()) < 3:
