@@ -25,11 +25,11 @@ turns:
     result:
       verified: true
       first_name: Marco
-      session_token: C-1042|1794072162|c2ab622954d5c0aa29cd3527
+      session_token: C-1042|1793000900|77c88f3493bc8855013053f5
 - calls:
   - name: get_bill
     args:
-      session_token: C-1042|1794072162|c2ab622954d5c0aa29cd3527
+      session_token: C-1042|1793000900|77c88f3493bc8855013053f5
     result:
       amount_eur: 84.3
       due_date: '2026-11-20'

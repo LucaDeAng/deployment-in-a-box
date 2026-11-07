@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Brezzaluce Energia: simulated KPI tree</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1d1d1b;--muted:#6b6a65;--line:#e4e1d8;--ok:#2f7d4f;--bad:#b3402e}
+@media (prefers-color-scheme:dark){:root{--bg:#151514;--fg:#ecebe6;--muted:#a3a29b;--line:#2e2d2a;--ok:#6cc08b;--bad:#ef8a76}}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;max-width:760px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.4rem} .muted{color:var(--muted)} ul.tree{list-style:none;padding-left:0}
+ul.tree ul{list-style:none;border-left:1px solid var(--line);margin-left:8px;padding-left:16px}
+b.ok{color:var(--ok)} b.bad{color:var(--bad)} code{font-size:.9em}
+</style>
+<h1>Brezzaluce Energia: simulated KPI tree</h1>
+<p class="muted">55 simulated calls, weighted by the assumed contact mix. Synthetic data: a method demo, not results from a deployment.</p>
+<ul class="tree">
+<li><b>North star: cost per resolved contact</b>: €1.43 on per-minute pricing, €2.19 on per-resolution pricing
+ <ul>
+ <li>Safety gate: <b class="ok">PASS</b> (100% of calls pass every check)<ul><li>none</li></ul></li>
+ <li>Task success: 97%
+  <ul><li>Containment (no human): 82%</li><li>Resolution: 70%</li>
+  <li>Transfers by reason<ul><li>auth_failed: 5%</li><li>customer_request: 10%</li><li>system_error: 3%</li></ul></li></ul></li>
+ <li>Effort: 1.9 caller turns per call, about 1.3 min handle time</li>
+ <li>1,000 contacts: €1,002.00 per-minute vs €1,530.00 per-resolution (operator cost included)</li>
+ <li>Break-even: per-resolution pricing is cheaper while the resolution rate stays below 11%</li>
+ </ul></li>
+</ul>
+<h2>Assumptions</h2><ul><li><code>seconds_per_exchange</code> = 25.0</li><li><code>fixed_overhead_seconds</code> = 30.0</li><li><code>price_per_minute_eur</code> = 0.08</li><li><code>price_per_resolution_eur</code> = 0.9</li><li><code>human_cost_per_contact_eur</code> = 5.0</li></ul>
+<p class="muted">Change them to the client's figures, or try the scenarios in the <a href="https://genai4business.com/tools/business-case">business case calculator</a>.</p>
+</html>

@@ -25,11 +25,11 @@ turns:
     result:
       verified: true
       first_name: Antonio
-      session_token: C-3310|1794072163|14407477db76e0ce3c849d6d
+      session_token: C-3310|1793000900|1de6be29c8be9f5a844223c0
 - calls:
   - name: get_bill
     args:
-      session_token: C-3310|1794072163|14407477db76e0ce3c849d6d
+      session_token: C-3310|1793000900|1de6be29c8be9f5a844223c0
     result:
       amount_eur: 132.1
       due_date: '2026-10-30'

@@ -22,11 +22,11 @@ turns:
     result:
       verified: true
       first_name: Marco
-      session_token: C-1042|1794072163|dabdaf2404248ad2c27dd879
+      session_token: C-1042|1793000900|77c88f3493bc8855013053f5
 - calls:
   - name: submit_meter_reading
     args:
-      session_token: C-1042|1794072163|dabdaf2404248ad2c27dd879
+      session_token: C-1042|1793000900|77c88f3493bc8855013053f5
       reading: 45231
     result:
       accepted: true

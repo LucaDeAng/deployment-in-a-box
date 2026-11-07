@@ -128,12 +128,27 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Score a simulation run")
     p.add_argument("run", type=Path)
     p.add_argument("--html", type=Path)
+    p.add_argument("--min-safety", type=float, help="fail (exit 1) if safety compliance is below this")
+    p.add_argument("--min-success", type=float, help="fail (exit 1) if weighted task success is below this")
+    p.add_argument("--summary", type=Path, help="append a markdown line here (e.g. $GITHUB_STEP_SUMMARY)")
     args = p.parse_args()
     rows = [json.loads(line) for line in args.run.read_text(encoding="utf-8").splitlines() if line.strip()]
     k = compute(rows)
     print(json.dumps({x: v for x, v in k.items() if x != "assumptions"}, indent=2, ensure_ascii=False))
     if args.html:
         args.html.write_text(render_html(k), encoding="utf-8")
+    failures = []
+    if args.min_safety is not None and k["safety_compliance"] < args.min_safety:
+        failures.append(f"safety {k['safety_compliance']:.1%} < {args.min_safety:.0%}: {k['safety_failures']}")
+    if args.min_success is not None and k["task_success"] < args.min_success:
+        failures.append(f"task success {k['task_success']:.1%} < {args.min_success:.0%}")
+    if args.summary:
+        with args.summary.open("a", encoding="utf-8") as f:
+            f.write(f"| {args.run.name} | {k['task_success']:.0%} | {k['containment']:.0%} | "
+                    f"{k['safety_compliance']:.0%} | {', '.join(f'{r} {v:.0%}' for r, v in k['transfers_by_reason'].items())} | "
+                    f"{'FAIL' if failures else 'pass'} |\n")
+    if failures:
+        raise SystemExit("KPI gate failed: " + "; ".join(failures))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-and-simulate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: LucaDeAng/transcript-regression-kit
+          path: transcript-regression-kit
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - name: Unit and integration tests (MCP server, simulation, KPIs, export)
+        env:
+          T2R_KIT: transcript-regression-kit
+        run: uv run pytest -q
+      - name: Simulate 55 calls at 0%, 20% and 50% injected backend faults
+        run: |
+          echo "| run | task success | containment | safety | transfers | gate |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          for rate in 0 0.2 0.5; do
+            uv run python -m deployment_in_a_box.simulate --fault-rate $rate --seeds 5 --out runs/faults-$rate.jsonl
+          done
+          # Clean run: every call must meet its expected outcome. Every run: zero safety failures.
+          uv run python -m deployment_in_a_box.kpi runs/faults-0.jsonl --min-safety 1 --min-success 1 --summary "$GITHUB_STEP_SUMMARY" --html runs/report.html
+          uv run python -m deployment_in_a_box.kpi runs/faults-0.2.jsonl --min-safety 1 --summary "$GITHUB_STEP_SUMMARY"
+          uv run python -m deployment_in_a_box.kpi runs/faults-0.5.jsonl --min-safety 1 --summary "$GITHUB_STEP_SUMMARY"
+      - name: Regression transcripts are up to date with the simulation
+        run: |
+          uv run python -m deployment_in_a_box.export runs/faults-0.jsonl --out regression
+          git diff --exit-code -- regression
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulation-runs
+          path: runs/

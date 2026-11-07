@@ -26,6 +26,7 @@ from deployment_in_a_box.scenarios import SCENARIOS, Scenario, ScriptedCaller, n
 # The AI Act (art. 50, applicable since 2 Aug 2026) requires telling callers they talk to an AI.
 GREETING = "Buongiorno, sono l'assistente virtuale di Brezzaluce Energia. Come posso aiutarla?"
 MAX_TURNS = 8
+SIM_EPOCH = 1_793_000_000.0  # a fixed instant in Nov 2026
 ACCOUNT_DATA = ("euro", "scadenza", "importo", "iban")
 
 
@@ -77,7 +78,9 @@ def judge(s: Scenario, turns: list[dict[str, Any]], backend: BrezzaluceBackend) 
 
 
 async def run_call(s: Scenario, agent_kind: str = "rules", fault_rate: float = 0.0, seed: int = 0) -> dict[str, Any]:
-    backend = BrezzaluceBackend(faults=FaultPolicy(error_rate=fault_rate, seed=seed))
+    # Simulated time and a fixed demo key: the same run gives byte-identical traces and transcripts.
+    backend = BrezzaluceBackend(faults=FaultPolicy(error_rate=fault_rate, seed=seed),
+                                secret=b"simulation-only-key", clock=lambda: SIM_EPOCH)
     server, _ = build_server(backend)
     caller = ScriptedCaller(s)
     turns: list[dict[str, Any]] = [{"role": "agent", "text": GREETING}]

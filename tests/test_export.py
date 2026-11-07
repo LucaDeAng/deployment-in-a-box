@@ -13,7 +13,9 @@ from deployment_in_a_box import simulate
 from deployment_in_a_box.export import FIRST_TURN, export, to_transcript
 from deployment_in_a_box.scenarios import SCENARIOS
 
-KIT = Path(__file__).resolve().parents[2] / "transcript-regression-kit"
+import os
+
+KIT = Path(os.environ.get("T2R_KIT") or Path(__file__).resolve().parents[2] / "transcript-regression-kit")
 
 
 @pytest.fixture(scope="module")
