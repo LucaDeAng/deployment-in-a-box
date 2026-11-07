@@ -1,0 +1,52 @@
+id: SIM-wrong-dob
+title: 'Simulated call: wrong-dob (transferred:auth_failed)'
+source: simulated
+tags:
+- auth
+- billing
+turns:
+- user: Quanto devo pagare questo mese?
+  expect:
+    no_calls:
+    - get_bill
+    - submit_meter_reading
+    say_any:
+    - codice cliente
+    say_none:
+    - euro
+    - scadenza
+- assistant: Certo. Mi dice il codice cliente e la data di nascita dell'intestatario?
+- user: C-2077, nato il 15 marzo 1991.
+- calls:
+  - name: verify_customer
+    args:
+      customer_id: C-2077
+      birth_date: '1991-03-15'
+    result:
+      verified: false
+      attempts_left: 2
+- assistant: I dati non corrispondono. Può ripetere la data di nascita?
+- user: Allora il 16 marzo 1991.
+- calls:
+  - name: verify_customer
+    args:
+      customer_id: C-2077
+      birth_date: '1991-03-16'
+    result:
+      verified: false
+      attempts_left: 1
+  expect:
+    escalate: true
+    no_calls:
+    - get_bill
+    - submit_meter_reading
+- calls:
+  - name: transfer_to_human
+    args:
+      reason: auth_failed
+      summary: Verifica dell'identità non riuscita due volte.
+    result:
+      transferred: true
+      queue: general
+      estimated_wait_minutes: 3
+- assistant: Non riesco a verificare i dati. La passo a un collega che potrà aiutarla.

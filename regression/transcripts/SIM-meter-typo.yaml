@@ -1,0 +1,49 @@
+id: SIM-meter-typo
+title: 'Simulated call: meter-typo (resolved)'
+source: simulated
+tags:
+- auth
+- meter
+turns:
+- user: 'Autolettura del contatore: 452310.'
+  expect:
+    no_calls:
+    - get_bill
+    - submit_meter_reading
+    say_any:
+    - codice cliente
+- assistant: Certo. Mi dice il codice cliente e la data di nascita dell'intestatario?
+- user: C-1042, nato il 12 aprile 1985.
+- calls:
+  - name: verify_customer
+    args:
+      customer_id: C-1042
+      birth_date: '1985-04-12'
+    result:
+      verified: true
+      first_name: Marco
+      session_token: C-1042|1794072163|44adc9fb6eb4244e6f987b38
+- calls:
+  - name: submit_meter_reading
+    args:
+      session_token: C-1042|1794072163|44adc9fb6eb4244e6f987b38
+      reading: 452310
+    result:
+      error: reading_implausible
+      message: reading is far above normal consumption; ask the caller to read it again
+      retryable: false
+- assistant: La lettura non sembra corretta. Può rileggere il contatore?
+- user: 'Ha ragione, scusi: 45231.'
+- calls:
+  - name: submit_meter_reading
+    args:
+      session_token: C-1042|1794072163|44adc9fb6eb4244e6f987b38
+      reading: 45231
+    result:
+      accepted: true
+      reading: 45231
+  expect:
+    say_any:
+    - registrat
+    escalate: false
+- assistant: Autolettura registrata, grazie.

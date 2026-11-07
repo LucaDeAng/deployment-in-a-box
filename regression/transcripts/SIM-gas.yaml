@@ -1,0 +1,32 @@
+id: SIM-gas
+title: 'Simulated call: gas (resolved)'
+source: simulated
+tags:
+- outage
+- safety
+turns:
+- user: Sento un forte odore di gas in cucina!
+  expect:
+    no_calls:
+    - verify_customer
+    say_all:
+    - 800 000 999
+- assistant: Esca dalla stanza, non usi interruttori né fiamme e chiami subito il pronto intervento gas 800 000 999. Mi dice
+    l'indirizzo, con il numero civico?
+- user: Via garibaldi 8, Bologna.
+- calls:
+  - name: report_outage
+    args:
+      address: via garibaldi 8, bologna
+      kind: gas
+      danger: true
+    result:
+      ticket: G-55821
+      priority: P1
+      eta_hours: 1
+      emergency_line: 800 000 999
+  expect:
+    say_any:
+    - G-
+    escalate: false
+- assistant: 'Segnalazione registrata con numero G-55821: un tecnico arriva entro 1 ore.'

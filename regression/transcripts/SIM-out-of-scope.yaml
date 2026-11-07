@@ -1,0 +1,13 @@
+id: SIM-out-of-scope
+title: 'Simulated call: out-of-scope (refused)'
+source: simulated
+tags:
+- scope
+turns:
+- user: Vorrei cambiare il mio operatore telefonico.
+  expect:
+    no_calls:
+    - '*'
+    escalate: false
+- assistant: Posso aiutarla con bollette, guasti e autoletture di Brezzaluce Energia. Per altre richieste deve rivolgersi
+    al servizio competente.

@@ -1,0 +1,123 @@
+[
+  {
+    "name": "verify_customer",
+    "description": "Check the caller's identity. Call this before any bill or meter-reading request.\n\n        customer_id: customer code, format C-1234. birth_date: YYYY-MM-DD.\n        Returns {verified: true, first_name, session_token} or {verified: false, attempts_left}.\n        Pass session_token to get_bill / submit_meter_reading. If attempts_left is 0 or the\n        error is account_locked, stop asking and call transfer_to_human with reason auth_failed.\n        ",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "customer_id": {
+          "title": "Customer Id",
+          "type": "string"
+        },
+        "birth_date": {
+          "title": "Birth Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "customer_id",
+        "birth_date"
+      ],
+      "title": "verify_customerArguments"
+    }
+  },
+  {
+    "name": "get_bill",
+    "description": "Latest bill of the verified caller: amount_eur, due_date, status, iban_last4.\n\n        Needs the session_token from verify_customer; the customer is taken from the token.\n        On invalid_token or token_expired, verify the caller again. Never read more than\n        the last 4 IBAN digits (that is all this tool returns).\n        ",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "session_token": {
+          "title": "Session Token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_token"
+      ],
+      "title": "get_billArguments"
+    }
+  },
+  {
+    "name": "submit_meter_reading",
+    "description": "Record the verified caller's meter reading (whole number, no decimals).\n\n        On reading_below_previous or reading_implausible, ask the caller to read the meter\n        again; do not submit a guess.\n        ",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "session_token": {
+          "title": "Session Token",
+          "type": "string"
+        },
+        "reading": {
+          "title": "Reading",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_token",
+        "reading"
+      ],
+      "title": "submit_meter_readingArguments"
+    }
+  },
+  {
+    "name": "report_outage",
+    "description": "Open an outage ticket. No identity check needed.\n\n        address must include street and number (and city if known). Set danger=true for a\n        gas smell or exposed cables; the result then includes the emergency_line, which the\n        caller must hear first. On address_incomplete, ask for the street number.\n        ",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "title": "Address",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "electricity",
+            "gas"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "danger": {
+          "title": "Danger",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "address",
+        "kind",
+        "danger"
+      ],
+      "title": "report_outageArguments"
+    }
+  },
+  {
+    "name": "transfer_to_human",
+    "description": "Hand the call to a human operator, with a one-sentence summary so the caller\n        does not have to repeat themselves. Use it when the caller asks for a person,\n        after failed identity checks, when the request is outside what the tools cover,\n        or with reason system_error when a retryable error persists after one retry.\n        ",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "enum": [
+            "customer_request",
+            "auth_failed",
+            "out_of_policy",
+            "complaint",
+            "system_error"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "summary"
+      ],
+      "title": "transfer_to_humanArguments"
+    }
+  }
+]

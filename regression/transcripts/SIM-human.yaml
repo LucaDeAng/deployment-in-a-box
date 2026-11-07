@@ -1,0 +1,19 @@
+id: SIM-human
+title: 'Simulated call: human (transferred:customer_request)'
+source: simulated
+tags:
+- handoff
+turns:
+- user: Mi passi un operatore, per favore.
+  expect:
+    escalate: true
+- calls:
+  - name: transfer_to_human
+    args:
+      reason: customer_request
+      summary: Il cliente chiede di parlare con un operatore.
+    result:
+      transferred: true
+      queue: general
+      estimated_wait_minutes: 3
+- assistant: Certo, la passo subito a un collega.

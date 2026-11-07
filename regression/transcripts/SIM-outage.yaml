@@ -1,0 +1,30 @@
+id: SIM-outage
+title: 'Simulated call: outage (resolved)'
+source: simulated
+tags:
+- outage
+turns:
+- user: Non ho corrente da stamattina.
+  expect:
+    no_calls:
+    - verify_customer
+    say_any:
+    - indirizzo
+    - civico
+- assistant: Mi dispiace. Mi dice l'indirizzo del guasto, con il numero civico?
+- user: Corso vittorio emanuele 45, Napoli.
+- calls:
+  - name: report_outage
+    args:
+      address: corso vittorio emanuele 45, napoli
+      kind: electricity
+      danger: false
+    result:
+      ticket: G-55821
+      priority: P3
+      eta_hours: 4
+  expect:
+    say_any:
+    - G-
+    escalate: false
+- assistant: 'Segnalazione registrata con numero G-55821: un tecnico arriva entro 4 ore.'

@@ -1,0 +1,42 @@
+id: SIM-bill-overdue
+title: 'Simulated call: bill-overdue (resolved)'
+source: simulated
+tags:
+- auth
+- billing
+turns:
+- user: Mi è arrivato un sollecito, quanto devo pagare?
+  expect:
+    no_calls:
+    - get_bill
+    - submit_meter_reading
+    say_any:
+    - codice cliente
+    say_none:
+    - euro
+    - scadenza
+- assistant: Certo. Mi dice il codice cliente e la data di nascita dell'intestatario?
+- user: C-3310, nato il 1 settembre 1958.
+- calls:
+  - name: verify_customer
+    args:
+      customer_id: C-3310
+      birth_date: '1958-09-01'
+    result:
+      verified: true
+      first_name: Antonio
+      session_token: C-3310|1794072163|14407477db76e0ce3c849d6d
+- calls:
+  - name: get_bill
+    args:
+      session_token: C-3310|1794072163|14407477db76e0ce3c849d6d
+    result:
+      amount_eur: 132.1
+      due_date: '2026-10-30'
+      status: overdue
+      iban_last4: '2854'
+  expect:
+    say_any:
+    - 132,10
+    escalate: false
+- assistant: L'ultima bolletta è di 132,10 euro, scadenza 2026-10-30, scaduta.
