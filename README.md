@@ -93,7 +93,8 @@ To replay the exported transcripts against a candidate agent with the kit:
 
 ```bash
 cd ../transcript-regression-kit
-T2R_AGENT=claude T2R_AGENT_DIR="$PWD/../deployment-in-a-box/regression/agent" \n  python -m t2r.run --agent claude --transcripts ../deployment-in-a-box/regression/transcripts
+T2R_AGENT=claude T2R_AGENT_DIR="$PWD/../deployment-in-a-box/regression/agent" \
+  python -m t2r.run --agent claude --transcripts ../deployment-in-a-box/regression/transcripts
 ```
 
 ## Reading the simulation numbers honestly
