@@ -139,9 +139,11 @@ assumption are in [`docs/discovery.md`](docs/discovery.md).
 - **Auth is a demo token.** The MCP authorization spec expects OAuth 2.1 with
   audience-bound tokens. In production the session token would be one, issued
   after the identity check.
-- **AI callers are refused.** Consumer agents already call businesses. A declared
-  agent presenting a scoped, delegated credential is the open design question,
-  and the subject of the next asset.
+- **AI callers are refused.** Consumer agents already call businesses, and this
+  refusal names the secret to replay (the birth date). The follow-up,
+  [ai-to-ai-call-lab](https://github.com/LucaDeAng/ai-to-ai-call-lab), builds on
+  this repo: a declared agent presents a scoped, delegated credential, writes need
+  the holder, and a looping agent gets hung up on.
 
 MIT licence. Brezzaluce Energia, its customers and the emergency number
 800 000 999 are fictional.
