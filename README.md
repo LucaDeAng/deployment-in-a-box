@@ -75,7 +75,7 @@ scripted caller ──text──▶ agent (rules | Claude) ──MCP tools──
 
 ```bash
 uv sync
-uv run pytest -q                                   # 65 tests: server, simulation, judge controls, KPIs, export, LLM eval runner
+uv run pytest -q                                   # 70 tests: server, simulation, judge controls, KPIs, export, LLM eval runner
 uv run python -m deployment_in_a_box.simulate --fault-rate 0.2 --seeds 5 --out runs/faults.jsonl
 uv run python -m deployment_in_a_box.kpi runs/faults.jsonl --html runs/report.html --min-safety 1
 uv run python -m deployment_in_a_box.simulate --out runs/clean.jsonl   # regression/ is exported from the clean run
@@ -128,8 +128,8 @@ assumption are in [`docs/discovery.md`](docs/discovery.md).
 
 ## Results with a real LLM
 
-**Not run yet.** The runner is ready. The full grid costs real money, so it runs when
-I decide to spend it.
+**Not run yet.** The runner, the report and one smoke call work. The grid is 165 calls
+on a paid API, so running it is a separate decision from building it.
 
 | Injected backend faults | Task success | Safety violations | Handoff rate |
 |---|---|---|---|
@@ -150,9 +150,10 @@ uv run python -m deployment_in_a_box.eval_llm             # the grid (or: make e
   success, safety violations, handoff rate, containment, pass^1 and pass^5 per fault
   rate and per scenario, and tokens and cost per call at list prices. Without a known
   price it shows tokens only.
-- **Budget.** One smoke call (the bill scenario, two caller turns) took 4 API requests,
-  12,194 input and 301 output tokens: $0.055 at list price. Longer calls cost more.
-  That is a budget estimate, not a result.
+- **Budget.** One local smoke call (the bill scenario, two caller turns; `make
+  eval-llm-smoke` reproduces it) took 4 API requests, 12,194 input and 301 output
+  tokens: $0.055 at list price. At that rate the grid is about $9. Longer calls and
+  fault retries cost more, so plan for $10 to $30. That is a budget estimate, not a result.
 - **It will look worse than the rules agent, for a known reason.** The scripted callers
   and some checks react to exact phrases ("800 000 999", "84,30", "codice cliente"). A
   correct paraphrase can fail, so results look worse, never better. Read the failing
@@ -163,14 +164,16 @@ uv run python -m deployment_in_a_box.eval_llm             # the grid (or: make e
 
 ## Limits, and what I would do next
 
-- **The live agent has not run as an eval yet.** The runner is in place and one smoke
-  call passed end to end. Next: the 165-call grid above, reporting pass^1, pass^k,
+- **The live agent has not run as an eval yet.** The runner is in place and one local
+  smoke call ran end to end (resolved, all safety checks passed). Next: the 165-call grid above, reporting pass^1, pass^k,
   results per scenario and cost per call.
 - **Text, not audio.** The simulation skips speech-recognition errors, barge-in,
   silence and noise, which are the failure modes current voice benchmarks focus
   on. A cheap first step is a TTS→ASR round trip on "C-1042", birth dates, and
   "45231" against "452310" said aloud. Then DTMF for the birth date, and p50/p95
-  latency. The steps to put a voice front end on the same MCP tools are in
+  latency. Spoken-entity results for Italian speech recognition are in
+  [spoken-entities-it](https://github.com/LucaDeAng/spoken-entities-it). The steps to
+  put a voice front end on the same MCP tools are in
   [`voice/README.md`](voice/README.md): a scaffold, not built yet.
 - **Scripted callers are narrow.** They answer only what is asked, which catches
   missing questions but cannot improvise. LLM-simulated callers with personas

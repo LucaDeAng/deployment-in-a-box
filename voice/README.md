@@ -24,8 +24,8 @@ not what the agent may do. It exposes five tools
 Reuse the system prompt in
 [`system_prompt.md`](../src/deployment_in_a_box/system_prompt.md) (rule 10 is already
 written for speech: two sentences at most, amounts with a comma, dates in words) and the
-greeting in [`simulate.py`](../src/deployment_in_a_box/simulate.py), which carries the
-AI disclosure.
+greeting in [`simulate.py`](../src/deployment_in_a_box/simulate.py), which tells the
+caller they are talking to a virtual assistant.
 
 ## Step 0: serve the tools over HTTP
 
@@ -41,7 +41,7 @@ The endpoint is `https://<tunnel-host>/mcp` (streamable HTTP). Before exposing i
 
 - **The server has no authentication.** The back office is simulated and the data is
   synthetic, so the risk is low, but keep the tunnel up only while testing, or put a
-  shared secret in front of it.
+  shared secret in front of it (option A can send one: see step 5).
 - **One back office for every session.** Three wrong birth dates lock C-2077 until the
   server restarts, and readings and tickets pile up. Restart between test runs.
 - **Faults are off by default.** Set `BREZZALUCE_FAULT_RATE=0.2` to test the voice agent
@@ -57,9 +57,18 @@ synthesis, and calls the tools over MCP.
 3. System prompt: paste `system_prompt.md`. First message: the greeting from `simulate.py`.
 4. LLM: pick Claude if the agent settings offer it, so voice results compare with the
    text eval. Note the exact model in the results.
-5. Tools: add an MCP server with the tunnel URL above. The alternative is server tools
-   (one webhook per tool), which needs a small REST wrapper around the same five
-   functions. The MCP route avoids writing that wrapper.
+5. Tools: add a custom MCP server with the tunnel URL above (ElevenLabs takes SSE and
+   streamable HTTP servers). A shared secret goes in the integration's Secret Token
+   field, sent as the authorization header.
+   - **Approval:** the recommended "Always Ask" mode asks before every tool call, which
+     stalls a phone call. Use Fine-Grained Tool Approval with the five tools
+     auto-approved: the back office is synthetic.
+   - **Workspace:** MCP is off by default and has to be enabled for the workspace. It is
+     not available in Zero Retention Mode or HIPAA workspaces. There, use server tools
+     instead (one webhook per tool), which needs a small REST wrapper around the same
+     five functions.
+
+   [ElevenLabs MCP docs](https://elevenlabs.io/docs/eleven-agents/customization/tools/mcp).
 6. Test from the dashboard's test call first, then a phone number if needed.
 
 What you give up: less visibility into per-stage latency, and the tool loop is the
@@ -77,10 +86,13 @@ caller audio ─▶ transport (WebRTC or telephony) ─▶ VAD ─▶ STT (Itali
 1. Transport: WebRTC for desk tests, a telephony WebSocket for phone calls.
 2. VAD with interruptions on, so barge-in cuts the agent's audio.
 3. STT with an Italian model. Log the transcript of every caller turn.
-4. LLM step: either Pipecat's Anthropic service with the MCP tools registered through
-   its MCP client (check the current Pipecat docs for the names), or a custom processor
-   that calls `ClaudeAgent.turn(text, tools)` from `agents.py`. The second keeps the
-   exact loop the text eval scored.
+4. LLM step, one of two:
+   - **Pipecat's Anthropic service with Pipecat's MCP client.** `MCPClient` (from
+     `pipecat.services.mcp_service`) can start this server itself over stdio, so no
+     tunnel is needed. Pass `await mcp.tools()` as the tools of the `LLMContext`.
+     [Pipecat MCP docs](https://docs.pipecat.ai/server/utilities/mcp/mcp).
+   - **A custom processor that calls `ClaudeAgent.turn(text, tools)`** from `agents.py`.
+     This keeps the exact loop the text eval scored.
 5. TTS with an Italian voice.
 6. Write each call in the simulation's JSONL trace format (`turns` with `tool_calls`), so
    `simulate.judge` and the KPI tree score voice calls with the same safety checks.
@@ -104,7 +116,8 @@ on the phone.
   [spoken-entities-it](https://github.com/LucaDeAng/spoken-entities-it).
 - **Latency.** p50 and p95 from the end of the caller's speech to the first agent audio,
   split into STT, LLM (with tool calls) and TTS. Report turns with a tool call apart from
-  turns without one.
+  turns without one. In option B, Pipecat's pipeline metrics give time to first byte per
+  service.
 - **Barge-in.** The caller talks over the agent. Does the audio stop? In the gas
   scenario, does "800 000 999" still come first when the caller interrupts the safety
   message? That is the `emergency_first` check under interruption.
