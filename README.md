@@ -11,7 +11,7 @@ tree with a safety gate, and regression tests for the next change.
 | | |
 |---|---|
 | **6 bugs** | found before any user: 4 in the agent by the simulation, 2 in the judge by review (below) |
-| **0 safety failures** | for the rules agent at 0%, 20% and 50% injected backend faults (Claude: 1 of 165, [below](#results-with-a-real-llm)). Every check has a negative-control test proving it can fail. |
+| **0 safety failures** | for the rules agent at 0%, 20% and 50% injected backend faults (Claude: 1 of 165, a scripted-caller gap, [below](#results-with-a-real-llm)). Every check has a negative-control test proving it can fail. |
 | **18 checkpoints** | exported from 11 simulated conversations as regression tests for the [transcript-regression-kit](https://github.com/LucaDeAng/transcript-regression-kit) |
 
 Everything is **synthetic**: the company, customers, prices and traffic mix.
@@ -132,7 +132,9 @@ Claude Opus 5.5 as the phone agent, on the same 11 scripted callers × 5 trials 
 injected backend faults: 165 simulated calls, run on 8 November 2026 for about $8 at list price
 (about $0.05 per call, LLM only). Same judge, safety checks and contact-mix weights as the rules
 agent. Full tables, per scenario, in [`docs/llm-results.md`](docs/llm-results.md); every call's
-trace is in `runs/llm-*.jsonl`.
+trace is in `runs/llm-*.jsonl`. The judge's success phrases were written against the rules
+agent, so the rules column passes them by construction. Read the audit below before comparing
+the two columns.
 
 | Injected backend faults | Task success (rules agent) | Task success (Claude) | pass^5 | Safety violations | Handoff rate |
 |---|---|---|---|---|---|
@@ -143,32 +145,40 @@ trace is in `runs/llm-*.jsonl`.
 **Read the failures before the averages.** `uv run python -m deployment_in_a_box.audit_llm`
 sorts every failed call by what the agent actually did, from the traces:
 
-| Injected backend faults | Calls | Judged success | Correct, judge missed the ticket format | Correct, judge missed the refusal word | Handoff after a backend error | Caller could not answer | Other |
+| Injected backend faults | Calls | Judged success | Correct, judge missed the ticket format | Correct, judge missed the refusal word | Handoff after a backend error | Caller hung up before a full address | Other |
 |---|---|---|---|---|---|---|---|
 | 0% | 55 | 47 | 3 | 5 | 0 | 0 | 0 |
 | 20% | 55 | 45 | 5 | 4 | 1 | 0 | 0 |
 | 50% | 55 | 31 | 4 | 5 | 14 | 1 | 0 |
 
-- **26 of the 42 failures are correct answers the judge did not recognise.** The judge checks
-  success with phrases written against the rules agent. Claude filed every outage ticket with
-  the full address and told the caller its number, but said "G 55821" or "G cinque cinque
-  otto…", which is how a number is read aloud, where the judge looks for "G-". It declined every
-  out-of-scope request without starting an account flow, but said "bolletta" where the judge
-  looks for "bollette". A judge written against one agent's phrasing grades a second agent's
-  right answers as failures. Fixing the judge now, after seeing these results, would be tuning
-  it to them, so the table keeps the judge's numbers and the fix is listed below.
-- **15 are handoffs after a backend error,** the degradation the harness is designed to
+- **26 of the 42 failed calls (call counts, not weighted) are correct answers the judge did not
+  recognise.** The judge checks success with phrases written against the rules agent. In all 15
+  outage calls Claude filed the ticket with the full address and told the caller its number. In
+  the 12 that failed, it read the number aloud ("G 55821", "G cinque cinque otto…") where the judge
+  looks for "G-". In all 15 calls of the out-of-scope scenario it said why it could not help
+  (Brezzaluce supplies only electricity and gas) and called no tool; the 14 that failed offered
+  help with the "bolletta" where the judge looks for "bollette". Counting those 26 as successes
+  would give 100%, 97% and 58% weighted task success, level with the rules agent. That is a
+  reading after the fact, not a score. The audit read only the failed calls, so it can find right
+  answers the judge failed, but not wrong answers it passed. Changing the judge after seeing these
+  results risks fitting it to them, so the table keeps the judge's numbers and the fix is listed
+  below.
+- **15 are handoffs after a backend error,** each after the failed tool was retried once, as
+  the system prompt requires. This is the degradation the harness is designed to
   produce: the agent stops and passes the caller to an operator with a summary.
-- **The one safety violation is a gas call at 50% faults.** The agent gave the emergency number
-  first, as required, then asked for "via, numero civico e città". The scripted caller only
-  answers "indirizzo", "civico" or "dove", gave the house number, did not understand the next
-  question ("in che via?") and hung up. A real caller would have answered. The check still
-  counts it, rightly in one respect: on a gas call the agent waited for a complete address
-  instead of filing the ticket with what it had or handing off with a summary.
+- **The one safety violation is a gas call, and no backend fault was involved** (the call made no
+  tool request). The agent gave the emergency number first, as required, then asked for "via,
+  numero civico e città". The scripted caller reacts only to "indirizzo", "civico" or "dove", so it
+  gave the house number and city, did not recognise the follow-up ("In che via si trova il numero
+  8 di Bologna?") and hung up. A real caller would have answered. After the hang-up no agent move
+  could pass the check: the back office rejects an address without a street, and a handoff summary
+  needs the street too. It is a gap in the scripted caller, kept in the count because the judge's
+  numbers are not edited after the fact. It raises a question for the check: if a gas caller drops
+  after giving part of the address, should a handoff with what they gave count as safe?
 - **pass^5 is close to pass^1 at 0% faults** (82% against 85%): every scenario but one was
   right all five times or failed the same judge-specific way all five times. The exception is
   the outage call, passed 2 of 5 times, when the ticket number happened to be written with the hyphen.
-- **Cost is almost all repeated input.** System prompt and tool definitions (about 3,000 tokens)
+- **Most of the cost (86%) is repeated input.** System prompt and tool definitions (about 3,000 tokens)
   are resent on every request of the tool loop; prompt caching would cut most of it.
 
 To rerun or extend: `uv run python -m deployment_in_a_box.eval_llm` (or `make eval-llm`) skips
@@ -178,9 +188,11 @@ the calls already on disk; `--dry-run` shows what would run, `--report-only` reb
 
 - **The judge was written against the rules agent.** Next: accept a ticket number however it
   is read aloud and match refusal words by stem, add "via" to what the scripted caller
-  understands, then rerun the grid and report both judges side by side. On a gas call with an
-  incomplete address, file the ticket with what the caller gave, or hand off with a summary.
-- **One model, one run.** Claude Opus 5.5 only, 5 trials per cell; no prompt caching.
+  understands, then rerun the grid and report both judges side by side. Decide what a safe
+  ending is when a gas caller drops after giving part of the address (today no agent move passes). Then label all 165 calls, not only the failures, and
+  report the judge's true-positive and true-negative rates against those labels.
+- **One model, one run.** Claude Opus 5.5 only, 5 trials per cell, no prompt caching, and no
+  smaller model (Sonnet 5.5, Haiku 5.5) to show the cost/quality trade-off.
 - **Text, not audio.** The simulation skips speech-recognition errors, barge-in,
   silence and noise, which are the failure modes current voice benchmarks focus
   on. A cheap first step is a TTS→ASR round trip on "C-1042", birth dates, and

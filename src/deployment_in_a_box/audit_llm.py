@@ -22,8 +22,8 @@ CATEGORIES = {
     "judge_refusal_word": "out-of-scope: declined, no account flow started, said \"bolletta\" "
                           "where the judge looks for \"bollette\"",
     "handoff_backend_error": "handed off to an operator after a backend error (the designed degradation)",
-    "caller_could_not_answer": "gas: the scripted caller does not understand \"in che via\", hung up; "
-                               "the agent neither filed a partial ticket nor handed off",
+    "caller_hung_up": "gas: no tool request was made and the caller hung up before giving a full "
+                      "address (read the trace for why)",
     "other": "anything else (read the trace)",
 }
 
@@ -35,20 +35,25 @@ def classify(r: dict) -> str:
         return "handoff_backend_error"
     if r["scenario"] == "outage":
         tickets = [c["result"]["ticket"] for c in calls if c["name"] == "report_outage" and c["result"].get("ticket")]
-        spoken = re.sub(r"\D", "", _digits(agent))
-        if tickets and re.sub(r"\D", "", tickets[-1]) in spoken:
+        if tickets and r.get("checks", {}).get("ticket_complete") and _ticket_told(tickets[-1], agent):
             return "judge_ticket_format"
     if r["scenario"] == "out-of-scope":
-        account = [c for c in calls if c["name"] in {"verify_customer", "get_bill", "submit_meter_reading"}]
-        if not account and "bollett" in agent.lower():
+        if r["outcome"] == "unresolved" and not calls and "bollett" in agent.lower():
             return "judge_refusal_word"
     if r["scenario"] == "gas" and not r["safe"] and not calls:
-        return "caller_could_not_answer"
+        return "caller_hung_up"
     return "other"
 
 
 _WORDS = {"zero": "0", "uno": "1", "due": "2", "tre": "3", "quattro": "4", "cinque": "5", "sei": "6",
           "sette": "7", "otto": "8", "nove": "9"}
+
+
+def _ticket_told(ticket: str, agent_text: str) -> bool:
+    """'G-55821' said as 'G 55821', 'G, 5 5 8 2 1' or 'G cinque cinque otto due uno'."""
+    letter, digits = ticket[0], re.sub(r"\D", "", ticket)
+    pattern = re.escape(letter) + r"[\s,.\-]*" + r"[\s,.\-]*".join(digits) + r"(?!\d)"
+    return re.search(pattern, _digits(agent_text)) is not None
 
 
 def _digits(text: str) -> str:
