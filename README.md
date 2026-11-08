@@ -75,7 +75,7 @@ scripted caller ──text──▶ agent (rules | Claude) ──MCP tools──
 
 ```bash
 uv sync
-uv run pytest -q                                   # 43 tests: server, simulation, judge controls, KPIs, export
+uv run pytest -q                                   # 44 tests: server, simulation, judge controls, KPIs, export
 uv run python -m deployment_in_a_box.simulate --fault-rate 0.2 --seeds 5 --out runs/faults.jsonl
 uv run python -m deployment_in_a_box.kpi runs/faults.jsonl --html runs/report.html --min-safety 1
 uv run python -m deployment_in_a_box.simulate --out runs/clean.jsonl   # regression/ is exported from the clean run
