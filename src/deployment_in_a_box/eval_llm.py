@@ -6,7 +6,9 @@
 
 Each finished call is appended to runs/llm-<fault>.jsonl as soon as it ends, so a
 crash or a Ctrl-C loses at most one call, and a rerun skips every (scenario, seed,
-fault) triple that is already on disk. The scoring is the KPI tree's (kpi.compute),
+fault) triple that is already on disk. A call that errors (rate limit, refusal,
+network) is not recorded, since it says nothing about the agent: the run goes on and
+the next run retries it. The scoring is the KPI tree's (kpi.compute),
 the same judge and the same weights as the rules agent; this module only adds
 pass^k and what the calls cost.
 """
@@ -113,6 +115,8 @@ def summarize(rows: list[dict[str, Any]], k: int) -> dict[str, Any]:
         "output_tokens_per_call": _mean([u["output_tokens"] for u in usage]),
         "api_requests_per_call": _mean([u["api_requests"] for u in usage]),
         "cost_per_call_usd": None if not costs or None in costs else _mean(costs),
+        "fallback_calls": sum(1 for r in rows if r.get("usage")
+                              and any(m != r.get("model") for m in r["usage"].get("served_by", []))),
         "per_scenario": per_scenario,
     }
 
@@ -149,7 +153,8 @@ agent under this harness, not a deployment.
   tool loop), at the list prices in `eval_llm.PRICES_USD_PER_MTOK`. It is the LLM only,
   no telephony or speech.
 - **The callers react to exact phrases** (for example "800 000 999", "84,30"). A correct
-  paraphrase can fail a check, so these numbers can understate the agent, never overstate it.
+  paraphrase can fail a check. That effect can only lower the numbers. Other judge errors
+  could go either way, which is why every check has a negative-control test.
 """
 
 
@@ -175,6 +180,9 @@ def render(summaries: dict[float, dict[str, Any]], fault_rates: list[float], k: 
     fails = sorted({x for s in summaries.values() for x in s["safety_failures"]})
     if summaries:
         out.append("\nSafety failures (scenario:check): " + (", ".join(fails) if fails else "none") + "\n")
+        fb = sum(s["fallback_calls"] for s in summaries.values())
+        out.append(f"\nCalls where a fallback model served at least one request: {fb}"
+                   + (" (their cost shows as n/a)" if fb else "") + "\n")
 
     out.append("\n## By scenario\n\n"
                f"| Scenario | Expected | Backend faults | Successes | pass^1 | pass^{k} | Safety violations "
@@ -200,9 +208,23 @@ def run_path(runs_dir: Path, fault: float) -> Path:
 
 
 def load_rows(path: Path) -> list[dict[str, Any]]:
+    """Finished calls on disk. A line cut short by a killed process is skipped, so that call runs again."""
     if not path.exists():
         return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return rows
+
+
+def append_row(path: Path, row: dict[str, Any]) -> None:
+    # Start on a fresh line if the file ends in a partial write.
+    lead = "\n" if path.exists() and path.stat().st_size and not path.read_bytes().endswith(b"\n") else ""
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(lead + json.dumps(row, ensure_ascii=False) + "\n")
 
 
 def plan(scenario_ids: list[str], trials: int, done: list[dict[str, Any]]) -> list[tuple[Any, int]]:
@@ -221,7 +243,7 @@ def ensure_api_key(secrets_file: Path = SECRETS_FILE) -> None:
     if os.environ.get("ANTHROPIC_API_KEY"):
         return
     if secrets_file.exists():
-        for line in secrets_file.read_text(encoding="utf-8").splitlines():
+        for line in secrets_file.read_text(encoding="utf-8-sig").splitlines():
             name, sep, value = line.strip().removeprefix("export ").partition("=")
             if sep and name.strip() == "ANTHROPIC_API_KEY" and value.strip():
                 os.environ["ANTHROPIC_API_KEY"] = value.strip().strip("'\"")
@@ -245,6 +267,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--dry-run", action="store_true", help="print what would run; no API calls")
     p.add_argument("--report-only", action="store_true", help="rebuild the report from runs on disk; no API calls")
     a = p.parse_args(argv)
+    a.fault_rates = list(dict.fromkeys(a.fault_rates))  # 0 and 0.0 are one file: run it once
 
     todo = {f: plan(a.scenarios, a.trials, _selected(load_rows(run_path(a.runs_dir, f)), a.scenarios, a.trials, a.model))
             for f in a.fault_rates}
@@ -254,23 +277,31 @@ def main(argv: list[str] | None = None) -> None:
     if a.dry_run:
         return
 
+    failed: list[str] = []
     if not a.report_only and pending:
         import anyio
 
         from deployment_in_a_box.simulate import run_call
 
         ensure_api_key()
+        import anthropic
+
+        fatal = (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.NotFoundError)
         for f, calls in todo.items():
             path = run_path(a.runs_dir, f)
             path.parent.mkdir(parents=True, exist_ok=True)
             for s, seed in calls:
                 try:
                     row = anyio.run(run_call, s, "claude", f, seed, a.model)
-                except Exception as exc:  # rate limit, refusal, network: stop, keep what is done
-                    raise SystemExit(f"stopped at {s.id} seed {seed} fault {f:g}: {type(exc).__name__}: {exc}\n"
+                except fatal as exc:  # wrong key or model: every other call would fail the same way
+                    raise SystemExit(f"stopped: {type(exc).__name__}: {exc}\n"
                                      "Finished calls are saved; rerun the same command to resume.") from exc
-                with path.open("a", encoding="utf-8") as fh:
-                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+                except Exception as exc:  # noqa: BLE001 -- rate limit, refusal, network: not a score for the agent, no row
+                    failed.append(f"{s.id} seed {seed} fault {f:g}")
+                    print(f"  fault {f:g} {s.id} seed {seed}: ERROR {type(exc).__name__}: {exc} (not recorded)",
+                          file=sys.stderr)
+                    continue
+                append_row(path, row)
                 u = row["usage"]
                 print(f"  fault {f:g} {s.id} seed {seed}: {row['outcome']}, "
                       f"{'success' if row['success'] else 'FAIL'}, {'safe' if row['safe'] else 'UNSAFE'}, "
@@ -286,6 +317,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"report -> {a.report}")
     if any(s["safety_violations"] for s in summaries.values()):
         print("safety violations found: see the report", file=sys.stderr)
+    if failed:
+        raise SystemExit(f"{len(failed)} calls failed and were not recorded: {', '.join(failed)}. "
+                         "Rerun the same command to retry them; the report covers the calls that finished.")
 
 
 if __name__ == "__main__":

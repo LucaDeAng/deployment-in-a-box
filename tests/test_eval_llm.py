@@ -181,3 +181,54 @@ def test_missing_api_key_stops_before_any_call(monkeypatch, tmp_path):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(SystemExit, match="ANTHROPIC_API_KEY"):
         eval_llm.ensure_api_key(tmp_path / "missing.env")
+
+
+def test_a_failing_call_is_not_recorded_and_does_not_block_the_rest(fake_claude, monkeypatch, tmp_path):
+    class Flaky(FakeClaude):
+        def __init__(self, tool_specs, model=None):
+            super().__init__(tool_specs, model)
+            self.first_turn = True
+
+        async def turn(self, caller_text, tools):
+            if "operatore" in caller_text:  # the human scenario: the API "fails"
+                raise RuntimeError("model refused even after fallback")
+            return await super().turn(caller_text, tools)
+
+    monkeypatch.setattr(simulate, "ClaudeAgent", Flaky)
+    args = ["--scenarios", "bill", "human", "--fault-rates", "0", "--trials", "2",
+            "--runs-dir", str(tmp_path), "--report", str(tmp_path / "r.md")]
+    with pytest.raises(SystemExit, match="2 calls failed"):
+        eval_llm.main(args)
+    rows = eval_llm.load_rows(tmp_path / "llm-0.jsonl")
+    assert sorted(r["scenario"] for r in rows) == ["bill", "bill"]   # human not recorded, bill not blocked
+    assert (tmp_path / "r.md").exists()
+
+
+def test_a_line_cut_short_is_skipped_and_the_next_row_starts_on_its_own_line(tmp_path):
+    path = tmp_path / "llm-0.jsonl"
+    path.write_text('{"scenario": "bill", "seed": 0}\n{"scenario": "hu', encoding="utf-8")
+    assert eval_llm.load_rows(path) == [{"scenario": "bill", "seed": 0}]
+    eval_llm.append_row(path, {"scenario": "human", "seed": 7})
+    assert eval_llm.load_rows(path) == [{"scenario": "bill", "seed": 0}, {"scenario": "human", "seed": 7}]
+
+
+def test_api_key_file_with_a_byte_order_mark_still_works(monkeypatch, tmp_path):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    f = tmp_path / "anthropic.env"
+    f.write_text("ANTHROPIC_API_KEY=sk-test-bom\n", encoding="utf-8-sig")
+    eval_llm.ensure_api_key(f)
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-test-bom"
+
+
+def test_repeated_fault_rates_run_once(fake_claude, tmp_path):
+    eval_llm.main(["--scenarios", "bill", "--fault-rates", "0", "0.0", "--trials", "1",
+                   "--runs-dir", str(tmp_path), "--report", str(tmp_path / "r.md")])
+    assert fake_claude.made == 1
+
+
+def test_report_counts_calls_served_by_a_fallback_model():
+    rows = [row("bill", 0, True), row("bill", 100, True)]
+    rows[1]["usage"]["served_by"] = ["claude-opus-5-5", "claude-opus-5"]
+    s = summarize(rows, k=2)
+    assert s["fallback_calls"] == 1 and s["cost_per_call_usd"] is None
+    assert "fallback model served at least one request: 1 (their cost shows as n/a)" in render({0.0: s}, [0.0], 2, "m")

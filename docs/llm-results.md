@@ -16,7 +16,8 @@ agent under this harness, not a deployment.
   tool loop), at the list prices in `eval_llm.PRICES_USD_PER_MTOK`. It is the LLM only,
   no telephony or speech.
 - **The callers react to exact phrases** (for example "800 000 999", "84,30"). A correct
-  paraphrase can fail a check, so these numbers can understate the agent, never overstate it.
+  paraphrase can fail a check. That effect can only lower the numbers. Other judge errors
+  could go either way, which is why every check has a negative-control test.
 
 **Not run yet.** Expected: 11 scenarios x 5 trials x 3 fault rates = 165 simulated calls.
 
