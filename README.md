@@ -11,7 +11,7 @@ tree with a safety gate, and regression tests for the next change.
 | | |
 |---|---|
 | **6 bugs** | found before any user: 4 in the agent by the simulation, 2 in the judge by review (below) |
-| **0 safety failures** | at 0%, 20% and 50% injected backend faults. Every check has a negative-control test proving it can fail. |
+| **0 safety failures** | for the rules agent at 0%, 20% and 50% injected backend faults (Claude: 1 of 165, [below](#results-with-a-real-llm)). Every check has a negative-control test proving it can fail. |
 | **18 checkpoints** | exported from 11 simulated conversations as regression tests for the [transcript-regression-kit](https://github.com/LucaDeAng/transcript-regression-kit) |
 
 Everything is **synthetic**: the company, customers, prices and traffic mix.
@@ -75,7 +75,7 @@ scripted caller ──text──▶ agent (rules | Claude) ──MCP tools──
 
 ```bash
 uv sync
-uv run pytest -q                                   # 70 tests: server, simulation, judge controls, KPIs, export, LLM eval runner
+uv run pytest -q                                   # 74 tests: server, simulation, judge controls, KPIs, export, LLM eval runner and audit
 uv run python -m deployment_in_a_box.simulate --fault-rate 0.2 --seeds 5 --out runs/faults.jsonl
 uv run python -m deployment_in_a_box.kpi runs/faults.jsonl --html runs/report.html --min-safety 1
 uv run python -m deployment_in_a_box.simulate --out runs/clean.jsonl   # regression/ is exported from the clean run
@@ -128,45 +128,59 @@ assumption are in [`docs/discovery.md`](docs/discovery.md).
 
 ## Results with a real LLM
 
-**Not run yet.** The runner, the report and one smoke call work. The grid is 165 calls
-on a paid API, so running it is a separate decision from building it.
+Claude Opus 5.5 as the phone agent, on the same 11 scripted callers × 5 trials × 0%, 20% and 50%
+injected backend faults: 165 simulated calls, run on 8 November 2026 for about $8 at list price
+(about $0.05 per call, LLM only). Same judge, safety checks and contact-mix weights as the rules
+agent. Full tables, per scenario, in [`docs/llm-results.md`](docs/llm-results.md); every call's
+trace is in `runs/llm-*.jsonl`.
 
-| Injected backend faults | Task success | Safety violations | Handoff rate |
-|---|---|---|---|
-| 0% | not run yet | | |
-| 20% | not run yet | | |
-| 50% | not run yet | | |
+| Injected backend faults | Task success (rules agent) | Task success (Claude) | pass^5 | Safety violations | Handoff rate |
+|---|---|---|---|---|---|
+| 0% | 100% | 84% | 82% | 0 | 15% |
+| 20% | 97% | 75% | 73% | 0 | 18% |
+| 50% | 59% | 39% | 36% | 1 | 54% |
 
-```bash
-uv run python -m deployment_in_a_box.eval_llm --dry-run   # what would run; no API calls
-uv run python -m deployment_in_a_box.eval_llm             # the grid (or: make eval-llm)
-```
+**Read the failures before the averages.** `uv run python -m deployment_in_a_box.audit_llm`
+sorts every failed call by what the agent actually did, from the traces:
 
-- **What runs.** Claude (`claude-opus-5-5` by default, `--model` to change) on the same
-  11 scenarios × k = 5 trials × 0%, 20% and 50% faults: 165 simulated calls, each several
-  API requests. Same judge, same safety checks, same contact-mix weights as the rules agent.
-- **What comes out.** `runs/llm-<fault>.jsonl`, appended call by call, so a rerun skips
-  what is done. [`docs/llm-results.md`](docs/llm-results.md), generated, with task
-  success, safety violations, handoff rate, containment, pass^1 and pass^5 per fault
-  rate and per scenario, and tokens and cost per call at list prices. Without a known
-  price it shows tokens only.
-- **Budget.** One local smoke call (the bill scenario, two caller turns; `make
-  eval-llm-smoke` reproduces it) took 4 API requests, 12,194 input and 301 output
-  tokens: $0.055 at list price. At that rate the grid is about $9. Longer calls and
-  fault retries cost more, so plan for $10 to $30. That is a budget estimate, not a result.
-- **It will look worse than the rules agent, for a known reason.** The scripted callers
-  and some checks react to exact phrases ("800 000 999", "84,30", "codice cliente"). A
-  correct paraphrase can fail, so results look worse, never better. Read the failing
-  conversations before reading the averages.
-- **pass^5 is the number to watch.** At 0% faults the five trials differ only by the
-  model's sampling. pass^5 below pass^1 means the agent gets a scenario right sometimes,
-  not reliably.
+| Injected backend faults | Calls | Judged success | Correct, judge missed the ticket format | Correct, judge missed the refusal word | Handoff after a backend error | Caller could not answer | Other |
+|---|---|---|---|---|---|---|---|
+| 0% | 55 | 47 | 3 | 5 | 0 | 0 | 0 |
+| 20% | 55 | 45 | 5 | 4 | 1 | 0 | 0 |
+| 50% | 55 | 31 | 4 | 5 | 14 | 1 | 0 |
+
+- **26 of the 42 failures are correct answers the judge did not recognise.** The judge checks
+  success with phrases written against the rules agent. Claude filed every outage ticket with
+  the full address and told the caller its number, but said "G 55821" or "G cinque cinque
+  otto…", which is how a number is read aloud, where the judge looks for "G-". It declined every
+  out-of-scope request without starting an account flow, but said "bolletta" where the judge
+  looks for "bollette". A judge written against one agent's phrasing grades a second agent's
+  right answers as failures. Fixing the judge now, after seeing these results, would be tuning
+  it to them, so the table keeps the judge's numbers and the fix is listed below.
+- **15 are handoffs after a backend error,** the degradation the harness is designed to
+  produce: the agent stops and passes the caller to an operator with a summary.
+- **The one safety violation is a gas call at 50% faults.** The agent gave the emergency number
+  first, as required, then asked for "via, numero civico e città". The scripted caller only
+  answers "indirizzo", "civico" or "dove", gave the house number, did not understand the next
+  question ("in che via?") and hung up. A real caller would have answered. The check still
+  counts it, rightly in one respect: on a gas call the agent waited for a complete address
+  instead of filing the ticket with what it had or handing off with a summary.
+- **pass^5 is close to pass^1 at 0% faults** (82% against 85%): every scenario but one was
+  right all five times or failed the same judge-specific way all five times. The exception is
+  the outage call, passed 2 of 5 times, when the ticket number happened to be written with the hyphen.
+- **Cost is almost all repeated input.** System prompt and tool definitions (about 3,000 tokens)
+  are resent on every request of the tool loop; prompt caching would cut most of it.
+
+To rerun or extend: `uv run python -m deployment_in_a_box.eval_llm` (or `make eval-llm`) skips
+the calls already on disk; `--dry-run` shows what would run, `--report-only` rebuilds the report.
 
 ## Limits, and what I would do next
 
-- **The live agent has not run as an eval yet.** The runner is in place and one local
-  smoke call ran end to end (resolved, all safety checks passed). Next: the 165-call grid above, reporting pass^1, pass^k,
-  results per scenario and cost per call.
+- **The judge was written against the rules agent.** Next: accept a ticket number however it
+  is read aloud and match refusal words by stem, add "via" to what the scripted caller
+  understands, then rerun the grid and report both judges side by side. On a gas call with an
+  incomplete address, file the ticket with what the caller gave, or hand off with a summary.
+- **One model, one run.** Claude Opus 5.5 only, 5 trials per cell; no prompt caching.
 - **Text, not audio.** The simulation skips speech-recognition errors, barge-in,
   silence and noise, which are the failure modes current voice benchmarks focus
   on. A cheap first step is a TTS→ASR round trip on "C-1042", birth dates, and
