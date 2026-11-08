@@ -105,7 +105,8 @@ def judge(s: Scenario, turns: list[dict[str, Any]], backend: BrezzaluceBackend) 
             "tool_errors": sum(1 for t in turns for c in t.get("tool_calls", []) if c["result"].get("error"))}
 
 
-async def run_call(s: Scenario, agent_kind: str = "rules", fault_rate: float = 0.0, seed: int = 0) -> dict[str, Any]:
+async def run_call(s: Scenario, agent_kind: str = "rules", fault_rate: float = 0.0, seed: int = 0,
+                   model: str | None = None) -> dict[str, Any]:
     # Simulated time and a fixed demo key: the same run gives byte-identical traces and transcripts.
     backend = BrezzaluceBackend(faults=FaultPolicy(error_rate=fault_rate, seed=seed),
                                 secret=b"simulation-only-key", clock=lambda: SIM_EPOCH)
@@ -116,7 +117,7 @@ async def run_call(s: Scenario, agent_kind: str = "rules", fault_rate: float = 0
         async def tools(name: str, args: dict[str, Any]) -> dict[str, Any]:
             return _unwrap(await client.call_tool(name, args))
 
-        agent = RulesAgent() if agent_kind == "rules" else ClaudeAgent(tool_specs((await client.list_tools()).tools))
+        agent = RulesAgent() if agent_kind == "rules" else ClaudeAgent(tool_specs((await client.list_tools()).tools), model)
         caller_text: str | None = s.opening
         while caller_text is not None and len(turns) < 2 * MAX_TURNS:
             turns.append({"role": "caller", "text": caller_text})
@@ -124,9 +125,12 @@ async def run_call(s: Scenario, agent_kind: str = "rules", fault_rate: float = 0
             turns.append({"role": "agent", "text": out.text, "tool_calls": out.tool_calls})
             caller_text = caller.reply(out.text, out.transferred)
     verdict = judge(s, turns, backend)
-    return {"scenario": s.id, "reason": s.reason, "weight": s.weight, "expected": s.expected,
-            "agent": agent_kind, "fault_rate": fault_rate, "seed": seed,
-            "turns": turns, "n_turns": sum(1 for t in turns if t["role"] == "caller"), **verdict}
+    row = {"scenario": s.id, "reason": s.reason, "weight": s.weight, "expected": s.expected,
+           "agent": agent_kind, "fault_rate": fault_rate, "seed": seed,
+           "turns": turns, "n_turns": sum(1 for t in turns if t["role"] == "caller"), **verdict}
+    if isinstance(agent, ClaudeAgent):  # the LLM path also records what the call cost
+        row |= {"model": agent.model, "usage": agent.usage}
+    return row
 
 
 async def run_all(agent_kind: str = "rules", fault_rate: float = 0.0, seeds: int = 1) -> list[dict[str, Any]]:
