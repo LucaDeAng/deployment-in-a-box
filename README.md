@@ -11,7 +11,7 @@ tree with a safety gate, and regression tests for the next change.
 | | |
 |---|---|
 | **6 bugs** | found before any user: 4 in the agent by the simulation, 2 in the judge by review (below) |
-| **0 safety failures** | at 0%, 20% and 50% injected backend faults. Every check has a negative-control test proving it can fail. |
+| **0 safety failures** | for the rules agent at 0%, 20% and 50% injected backend faults (Claude: 1 of 165, a scripted-caller gap, [below](#results-with-a-real-llm)). Every check has a negative-control test proving it can fail. |
 | **18 checkpoints** | exported from 11 simulated conversations as regression tests for the [transcript-regression-kit](https://github.com/LucaDeAng/transcript-regression-kit) |
 
 Everything is **synthetic**: the company, customers, prices and traffic mix.
@@ -75,19 +75,21 @@ scripted caller ──text──▶ agent (rules | Claude) ──MCP tools──
 
 ```bash
 uv sync
-uv run pytest -q                                   # 44 tests: server, simulation, judge controls, KPIs, export
+uv run pytest -q                                   # 74 tests: server, simulation, judge controls, KPIs, export, LLM eval runner and audit
 uv run python -m deployment_in_a_box.simulate --fault-rate 0.2 --seeds 5 --out runs/faults.jsonl
 uv run python -m deployment_in_a_box.kpi runs/faults.jsonl --html runs/report.html --min-safety 1
 uv run python -m deployment_in_a_box.simulate --out runs/clean.jsonl   # regression/ is exported from the clean run
 uv run python -m deployment_in_a_box.export runs/clean.jsonl --out regression
 uv run python -m deployment_in_a_box.mcp_server    # the MCP server over stdio, for any MCP client
+uv run python -m deployment_in_a_box.mcp_server --http   # the same tools over HTTP, for a voice front end
 ```
 
 `--agent claude` swaps the rules agent for Claude, which gets its tool
 definitions from the MCP server's own tool list. It needs `ANTHROPIC_API_KEY`.
 Expect stricter scoring than for the rules agent: the scripted callers and some
 checks react to exact phrases (for example "800 000 999"), so a correct
-paraphrase can fail. That makes results look worse, never better.
+paraphrase can fail. That makes results look worse, never better. The eval for it
+is below, in [Results with a real LLM](#results-with-a-real-llm).
 
 To replay the exported transcripts against a candidate agent with the kit:
 
@@ -124,15 +126,81 @@ pricing wins below a 50% resolution rate. At the simulated 1.3 minutes and a
 voice-only €0.08/min, it wins only below 11%. The sensitivity grid and every
 assumption are in [`docs/discovery.md`](docs/discovery.md).
 
+## Results with a real LLM
+
+Claude Opus 5.5 as the phone agent, on the same 11 scripted callers × 5 trials × 0%, 20% and 50%
+injected backend faults: 165 simulated calls, run on 8 November 2026 for about $8 at list price
+(about $0.05 per call, LLM only). Same judge, safety checks and contact-mix weights as the rules
+agent. Full tables, per scenario, in [`docs/llm-results.md`](docs/llm-results.md); every call's
+trace is in `runs/llm-*.jsonl`. The judge's success phrases were written against the rules
+agent, so the rules column passes them by construction. Read the audit below before comparing
+the two columns.
+
+| Injected backend faults | Task success (rules agent) | Task success (Claude) | pass^5 | Safety violations | Handoff rate |
+|---|---|---|---|---|---|
+| 0% | 100% | 84% | 82% | 0 | 15% |
+| 20% | 97% | 75% | 73% | 0 | 18% |
+| 50% | 59% | 39% | 36% | 1 | 54% |
+
+**Read the failures before the averages.** `uv run python -m deployment_in_a_box.audit_llm`
+sorts every failed call by what the agent actually did, from the traces:
+
+| Injected backend faults | Calls | Judged success | Correct, judge missed the ticket format | Correct, judge missed the refusal word | Handoff after a backend error | Caller hung up before a full address | Other |
+|---|---|---|---|---|---|---|---|
+| 0% | 55 | 47 | 3 | 5 | 0 | 0 | 0 |
+| 20% | 55 | 45 | 5 | 4 | 1 | 0 | 0 |
+| 50% | 55 | 31 | 4 | 5 | 14 | 1 | 0 |
+
+- **26 of the 42 failed calls (call counts, not weighted) are correct answers the judge did not
+  recognise.** The judge checks success with phrases written against the rules agent. In all 15
+  outage calls Claude filed the ticket with the full address and told the caller its number. In
+  the 12 that failed, it read the number aloud ("G 55821", "G cinque cinque otto…") where the judge
+  looks for "G-". In all 15 calls of the out-of-scope scenario it said why it could not help
+  (Brezzaluce supplies only electricity and gas) and called no tool; the 14 that failed offered
+  help with the "bolletta" where the judge looks for "bollette". Counting those 26 as successes
+  would give 100%, 97% and 58% weighted task success, level with the rules agent. That is a
+  reading after the fact, not a score. The audit read only the failed calls, so it can find right
+  answers the judge failed, but not wrong answers it passed. Changing the judge after seeing these
+  results risks fitting it to them, so the table keeps the judge's numbers and the fix is listed
+  below.
+- **15 are handoffs after a backend error,** each after the failed tool was retried once, as
+  the system prompt requires. This is the degradation the harness is designed to
+  produce: the agent stops and passes the caller to an operator with a summary.
+- **The one safety violation is a gas call, and no backend fault was involved** (the call made no
+  tool request). The agent gave the emergency number first, as required, then asked for "via,
+  numero civico e città". The scripted caller reacts only to "indirizzo", "civico" or "dove", so it
+  gave the house number and city, did not recognise the follow-up ("In che via si trova il numero
+  8 di Bologna?") and hung up. A real caller would have answered. After the hang-up no agent move
+  could pass the check: the back office rejects an address without a street, and a handoff summary
+  needs the street too. It is a gap in the scripted caller, kept in the count because the judge's
+  numbers are not edited after the fact. It raises a question for the check: if a gas caller drops
+  after giving part of the address, should a handoff with what they gave count as safe?
+- **pass^5 is close to pass^1 at 0% faults** (82% against 85%): every scenario but one was
+  right all five times or failed the same judge-specific way all five times. The exception is
+  the outage call, passed 2 of 5 times, when the ticket number happened to be written with the hyphen.
+- **Most of the cost (86%) is repeated input.** System prompt and tool definitions (about 3,000 tokens)
+  are resent on every request of the tool loop; prompt caching would cut most of it.
+
+To rerun or extend: `uv run python -m deployment_in_a_box.eval_llm` (or `make eval-llm`) skips
+the calls already on disk; `--dry-run` shows what would run, `--report-only` rebuilds the report.
+
 ## Limits, and what I would do next
 
-- **The live agent has not run yet.** Next: Claude on the same 11 scenarios ×
-  k = 5 trials, reporting pass^1, pass^k, results per scenario and cost per call.
+- **The judge was written against the rules agent.** Next: accept a ticket number however it
+  is read aloud and match refusal words by stem, add "via" to what the scripted caller
+  understands, then rerun the grid and report both judges side by side. Decide what a safe
+  ending is when a gas caller drops after giving part of the address (today no agent move passes). Then label all 165 calls, not only the failures, and
+  report the judge's true-positive and true-negative rates against those labels.
+- **One model, one run.** Claude Opus 5.5 only, 5 trials per cell, no prompt caching, and no
+  smaller model (Sonnet 5.5, Haiku 5.5) to show the cost/quality trade-off.
 - **Text, not audio.** The simulation skips speech-recognition errors, barge-in,
   silence and noise, which are the failure modes current voice benchmarks focus
   on. A cheap first step is a TTS→ASR round trip on "C-1042", birth dates, and
   "45231" against "452310" said aloud. Then DTMF for the birth date, and p50/p95
-  latency.
+  latency. Spoken-entity results for Italian speech recognition are in
+  [spoken-entities-it](https://github.com/LucaDeAng/spoken-entities-it). The steps to
+  put a voice front end on the same MCP tools are in
+  [`voice/README.md`](voice/README.md): a scaffold, not built yet.
 - **Scripted callers are narrow.** They answer only what is asked, which catches
   missing questions but cannot improvise. LLM-simulated callers with personas
   would widen coverage, with the scripted ones kept as a deterministic floor.

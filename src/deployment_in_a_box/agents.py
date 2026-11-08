@@ -185,8 +185,16 @@ class RulesAgent:
         return self._turn("Come posso aiutarla?")
 
 
+USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+
+
 class ClaudeAgent:
-    """Claude over the MCP tool list. Needs ANTHROPIC_API_KEY."""
+    """Claude over the MCP tool list. Needs ANTHROPIC_API_KEY.
+
+    `usage` adds up the tokens of every API request in the call, and records which
+    model served each one (a server-side fallback can switch it), so cost per call
+    comes from what was billed, not from an estimate.
+    """
 
     def __init__(self, tool_specs: list[dict[str, Any]], model: str | None = None):
         import anthropic  # lazy: the offline path needs no SDK
@@ -195,6 +203,14 @@ class ClaudeAgent:
         self.model = model or os.environ.get("DIAB_MODEL", "claude-opus-5-5")
         self.tools = tool_specs
         self.messages: list[dict[str, Any]] = []
+        self.usage: dict[str, Any] = {**dict.fromkeys(USAGE_FIELDS, 0), "api_requests": 0, "served_by": []}
+
+    def _count(self, resp) -> None:
+        for f in USAGE_FIELDS:
+            self.usage[f] += getattr(resp.usage, f, None) or 0
+        self.usage["api_requests"] += 1
+        if resp.model not in self.usage["served_by"]:
+            self.usage["served_by"].append(resp.model)
 
     async def turn(self, caller_text: str, tools: ToolExec) -> AgentTurn:
         self.messages.append({"role": "user", "content": caller_text})
@@ -205,6 +221,7 @@ class ClaudeAgent:
                 model=self.model, max_tokens=1024, system=SYSTEM_PROMPT, tools=self.tools,
                 messages=self.messages, betas=["server-side-fallback-2026-07-01"], fallbacks="default",
             )
+            self._count(resp)
             if resp.stop_reason == "refusal":
                 raise RuntimeError("model refused even after fallback")
             self.messages.append({"role": "assistant", "content": [b.model_dump(exclude_none=True) for b in resp.content]})
