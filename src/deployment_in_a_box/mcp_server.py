@@ -12,14 +12,18 @@ Five tools, one per thing the agent may do. Design choices worth defending:
   what to do with each error, because that is where tool-using agents go wrong.
 
 Run it over stdio:  uv run python -m deployment_in_a_box.mcp_server
+Over HTTP, for a voice front end (see voice/README.md):
+    uv run python -m deployment_in_a_box.mcp_server --http --port 8000 --allowed-host <tunnel-host>
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 from typing import Any, Literal
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 
 from deployment_in_a_box.backend import BackendError, FaultPolicy, BrezzaluceBackend
 
@@ -92,9 +96,19 @@ def build_server(backend: BrezzaluceBackend | None = None) -> tuple[MCPServer, B
     return server, backend
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    p = argparse.ArgumentParser(description="Brezzaluce Energia MCP server (simulated back office)")
+    p.add_argument("--http", action="store_true", help="streamable HTTP on 127.0.0.1 instead of stdio")
+    p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--allowed-host", action="append", default=[],
+                   help="extra Host header to accept, e.g. a tunnel hostname (DNS-rebinding protection stays on)")
+    a = p.parse_args(argv)
     server, _ = build_server()
-    server.run("stdio")
+    if not a.http:
+        server.run("stdio")
+        return
+    security = TransportSecuritySettings(allowed_hosts=["127.0.0.1:*", "localhost:*", *a.allowed_host])
+    server.run("streamable-http", host="127.0.0.1", port=a.port, transport_security=security)
 
 
 if __name__ == "__main__":
