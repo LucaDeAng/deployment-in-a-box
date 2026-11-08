@@ -75,19 +75,21 @@ scripted caller ──text──▶ agent (rules | Claude) ──MCP tools──
 
 ```bash
 uv sync
-uv run pytest -q                                   # 44 tests: server, simulation, judge controls, KPIs, export
+uv run pytest -q                                   # 65 tests: server, simulation, judge controls, KPIs, export, LLM eval runner
 uv run python -m deployment_in_a_box.simulate --fault-rate 0.2 --seeds 5 --out runs/faults.jsonl
 uv run python -m deployment_in_a_box.kpi runs/faults.jsonl --html runs/report.html --min-safety 1
 uv run python -m deployment_in_a_box.simulate --out runs/clean.jsonl   # regression/ is exported from the clean run
 uv run python -m deployment_in_a_box.export runs/clean.jsonl --out regression
 uv run python -m deployment_in_a_box.mcp_server    # the MCP server over stdio, for any MCP client
+uv run python -m deployment_in_a_box.mcp_server --http   # the same tools over HTTP, for a voice front end
 ```
 
 `--agent claude` swaps the rules agent for Claude, which gets its tool
 definitions from the MCP server's own tool list. It needs `ANTHROPIC_API_KEY`.
 Expect stricter scoring than for the rules agent: the scripted callers and some
 checks react to exact phrases (for example "800 000 999"), so a correct
-paraphrase can fail. That makes results look worse, never better.
+paraphrase can fail. That makes results look worse, never better. The eval for it
+is below, in [Results with a real LLM](#results-with-a-real-llm).
 
 To replay the exported transcripts against a candidate agent with the kit:
 
@@ -124,15 +126,52 @@ pricing wins below a 50% resolution rate. At the simulated 1.3 minutes and a
 voice-only €0.08/min, it wins only below 11%. The sensitivity grid and every
 assumption are in [`docs/discovery.md`](docs/discovery.md).
 
+## Results with a real LLM
+
+**Not run yet.** The runner is ready. The full grid costs real money, so it runs when
+I decide to spend it.
+
+| Injected backend faults | Task success | Safety violations | Handoff rate |
+|---|---|---|---|
+| 0% | not run yet | | |
+| 20% | not run yet | | |
+| 50% | not run yet | | |
+
+```bash
+uv run python -m deployment_in_a_box.eval_llm --dry-run   # what would run; no API calls
+uv run python -m deployment_in_a_box.eval_llm             # the grid (or: make eval-llm)
+```
+
+- **What runs.** Claude (`claude-opus-5-5` by default, `--model` to change) on the same
+  11 scenarios × k = 5 trials × 0%, 20% and 50% faults: 165 simulated calls, each several
+  API requests. Same judge, same safety checks, same contact-mix weights as the rules agent.
+- **What comes out.** `runs/llm-<fault>.jsonl`, appended call by call, so a rerun skips
+  what is done. [`docs/llm-results.md`](docs/llm-results.md), generated, with task
+  success, safety violations, handoff rate, containment, pass^1 and pass^5 per fault
+  rate and per scenario, and tokens and cost per call at list prices. Without a known
+  price it shows tokens only.
+- **Budget.** One smoke call (the bill scenario, two caller turns) took 4 API requests,
+  12,194 input and 301 output tokens: $0.055 at list price. Longer calls cost more.
+  That is a budget estimate, not a result.
+- **It will look worse than the rules agent, for a known reason.** The scripted callers
+  and some checks react to exact phrases ("800 000 999", "84,30", "codice cliente"). A
+  correct paraphrase can fail, so results look worse, never better. Read the failing
+  conversations before reading the averages.
+- **pass^5 is the number to watch.** At 0% faults the five trials differ only by the
+  model's sampling. pass^5 below pass^1 means the agent gets a scenario right sometimes,
+  not reliably.
+
 ## Limits, and what I would do next
 
-- **The live agent has not run yet.** Next: Claude on the same 11 scenarios ×
-  k = 5 trials, reporting pass^1, pass^k, results per scenario and cost per call.
+- **The live agent has not run as an eval yet.** The runner is in place and one smoke
+  call passed end to end. Next: the 165-call grid above, reporting pass^1, pass^k,
+  results per scenario and cost per call.
 - **Text, not audio.** The simulation skips speech-recognition errors, barge-in,
   silence and noise, which are the failure modes current voice benchmarks focus
   on. A cheap first step is a TTS→ASR round trip on "C-1042", birth dates, and
   "45231" against "452310" said aloud. Then DTMF for the birth date, and p50/p95
-  latency.
+  latency. The steps to put a voice front end on the same MCP tools are in
+  [`voice/README.md`](voice/README.md): a scaffold, not built yet.
 - **Scripted callers are narrow.** They answer only what is asked, which catches
   missing questions but cannot improvise. LLM-simulated callers with personas
   would widen coverage, with the scripted ones kept as a deterministic floor.
